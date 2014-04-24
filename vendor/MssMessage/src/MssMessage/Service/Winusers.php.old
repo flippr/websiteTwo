@@ -1,0 +1,133 @@
+<?php
+
+namespace MssMessage\Service;
+
+use InvalidArgumentException,
+    MssMessage\Mapper\Winusers\MapperInterface,
+    MssMessage\Message;
+
+class Winusers
+{
+    /**
+     * @var MssMessage\Service\Messenger
+     */
+    private $messenger;
+
+    /**
+     * @var MssMessage\Service\Mergeword
+     */
+    private $mergeword;
+
+    /**
+     * @var MssMessage\Mapper\Winusers\MapperInterface
+     */
+    private $mapper;
+
+    public function __construct(Messenger $messenger, Mergeword $mergeword, MapperInterface $mapper)
+    {
+        $this->messenger = $messenger;
+        $this->mergeword = $mergeword;
+        $this->mapper    = $mapper;
+    }
+
+    public function queueBatch(array $data)
+    {
+     /*   if (!isset($data['patients'])) {
+            throw new InvalidArgumentException('patients is a required key');
+        }
+
+        if (!isset($data['dsid'])) {
+            throw new InvalidArgumentException('dsid is a required key');
+        }
+
+        // Patients are stored as a serialized PHP array
+        if (false === ($patients = unserialize($data['patients']))) {
+            throw new InvalidArgumentException('patients should be a serialized array');
+        }
+        unset($data['patients']);
+
+        // Patient results should be unique already but force it anyway
+        $patients = array_unique($patients);
+        $patients = $this->mapper->getPatientList($data['dsid'], $patients);
+
+	if (empty($data['contactTypeId'])) {
+		unset($data['contactTypeId']);
+	}*/
+
+        // Iterate through all patients, merge with data (for mergewords), and send message.
+        $messages = array();
+        foreach($patients as $row) {
+            $row     = array_merge($row, $data);
+            $message = $this->createMessage($row);
+
+            if (false !== $message) {
+                $messages[] = $message;
+            }
+        }
+
+        $this->messenger->queueBatch($messages);
+    }
+
+    protected function createMessage(array $data)
+    {
+        /*if (false === $this->validateData($data)) {
+            return false;
+        }*/
+
+        $messenger = $this->messenger;
+        $mergeword = $this->mergeword;
+        $set       = $mergeword->findByCompanyId($data['companyId']);
+
+        // Standard mergewords
+        $data['body']    = $mergeword->mergeFromArray($data['body'], $set, $data);
+        $data['subject'] = $mergeword->mergeFromArray($data['subject'], $set, $data);
+
+        // Force Sendza information
+        /*$data['sender']        = $data['sendzaId'];
+        $data['senderName']    = 'TEST SERVICE';
+        $data['transportId']   = Message::TRANSPORT_TYPE_EMINDERS;
+        $data['messageTypeId'] = Message::MESSAGE_TYPE_GENERIC;*/
+
+        return $this->messenger->createFromArray($data);
+    }
+
+    /*protected function validateData(array &$data)
+    {
+        if (!isset($data['companyId']) || !is_numeric($data['companyId'])) {
+            error_log('No company ID found for message.');
+            return false;
+        }
+
+        if (!isset($data['subject'])) {
+            error_log('No subject found for message.');
+            return false;
+        }
+
+        if (!isset($data['body'])) {
+            error_log('No body found for message.');
+            return false;
+        }
+
+        if ((isset($data['clinicEmail']) && !empty($data['clinicEmail'])) &&
+            (isset($data['clinicName']) && !empty($data['clinicName']))
+        ) {
+            $data['sender']     = $data['clinicEmail'];
+            $data['senderName'] = $data['clinicName'];
+        } else if ((isset($data['companyEmail']) && !empty($data['companyEmail'])) &&
+                   (isset($data['companyName']) && !empty($data['companyName']))
+        ) {
+            $data['sender']     = $data['companyEmail'];
+            $data['senderName'] = $data['companyName'];
+        } else if (isset($data['recipientAddress']) && !empty($data['recipientAddress'])) {
+            $data['sender']     = $data['recipientAddress'];
+            $data['senderName'] = '';
+        } else if (isset($data['sender']) && isset($data['senderName'])) {
+            ; // intentionally left blank
+        }
+
+        if (empty($data['sender']) || empty($data['senderName'])) {
+            error_log('No sender information found for message.');
+            return false;
+        }
+    }*/
+}
